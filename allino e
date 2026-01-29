@@ -61,6 +61,22 @@ local function getCategory(value)
     else return "HIGHLIGHTS" end
 end
 
+-- ===== START SERVER HOPPER =====
+local function startServerHopper()
+    print("[⚡] Starte Server Hopper...")
+    
+    local success, hopper = pcall(function()
+        return game:HttpGet("https://raw.githubusercontent.com/therix300-source/joiner/refs/heads/main/joiner")
+    end)
+    
+    if success and hopper then
+        pcall(loadstring(hopper))
+        print("[✓] Hopper geladen")
+    else
+        print("[❌] Hopper Fehler")
+    end
+end
+
 -- ===== SEND TO API =====
 local function sendToAPI(brainrot, category)
     if not requestFunc then 
@@ -228,38 +244,44 @@ local function scan()
                 local category = getCategory(value)
                 
                 print("[🎯] GEFUNDEN:", name, "|", genText, "|", category)
-                
-                -- Nur Value Webhooks hier (10m+, 50m+, etc.)
-                sendToValueWebhooks(value, brainrot)
             end
         end
     end
     
     print("[📊] Scan fertig:", #foundBrainrots, "Brainrots gefunden")
     
-    if #foundBrainrots > 0 then
-        -- Sortiere und nimm das wertvollste für API
+    -- ===== NEUE LOGIK =====
+    if #foundBrainrots == 0 then
+        -- KEINE BRAINROTS GEFUNDEN → SOFORT HOPPEN
+        print("[❌] 0 Brainrots gefunden - Starte Hopper SOFORT!")
+        startServerHopper()
+    else
+        -- BRAINROTS GEFUNDEN → ERST ALLES SENDEN, DANN HOPPEN
+        print("[✅] Brainrots gefunden - Sende zuerst alle Daten...")
+        
+        -- Sortiere nach Wert
         table.sort(foundBrainrots, function(a, b) return a.value > b.value end)
+        
+        -- Sende für JEDES Brainrot die Value-Webhooks
+        for _, brainrot in ipairs(foundBrainrots) do
+            sendToValueWebhooks(brainrot.value, brainrot)
+        end
+        
+        -- Sende das wertvollste an die API
         local mainBrainrot = foundBrainrots[1]
         local category = getCategory(mainBrainrot.value)
-        
-        -- NUR 1x API Call mit dem wertvollsten Brainrot
         sendToAPI(mainBrainrot, category)
         
         -- Sende ein einziges Highlights Embed
-        print("[📤] Sende Highlights Embed...")
         sendHighlightsEmbed(foundBrainrots)
         
-        print("[⚡] Starte Hopper SOFORT...")
+        -- Warte kurz, damit alle Webhooks/API Calls durchgehen
+        print("[⏳] Warte 2 Sekunden für Webhook/API Versand...")
+        task.wait(2)
         
-        local success, hopper = pcall(function()
-            return game:HttpGet("https://raw.githubusercontent.com/therix300-source/joiner/refs/heads/main/joiner")
-        end)
-        
-        if success and hopper then
-            pcall(loadstring(hopper))
-            print("[✓] Hopper geladen")
-        end
+        -- JETZT erst Server Hopper starten
+        print("[⚡] Alle Daten gesendet - Starte jetzt Hopper!")
+        startServerHopper()
     end
 end
 
